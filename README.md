@@ -17,10 +17,14 @@
 - ✅ 删除项目
 
 ### 资源配额管理
-- CPU 限制
-- 内存限制
-- GPU 限制（同时设置 `requests.nvidia.com/gpu` 和 `requests.nvidia.com/l4`）
-- 存储配额
+- CPU 限制（hard）
+- 内存限制（hard）
+- GPU 资源限制（支持任意 Kubernetes 资源键）
+  - `requests.nvidia.com/l4`
+  - `requests.nvidia.com/gpu`
+  - 其他自定义资源
+- 存储配额（hard）
+- 灵活扩展：支持任意 Kubernetes ResourceQuota 资源键
 
 ## 快速开始
 
@@ -103,10 +107,15 @@ Content-Type: application/json
   "owner_email": "user@example.com",
   "cpu_limit": "4",
   "memory_limit": "8",
-  "gpu_limit": "1",
-  "storage_size": "20"
+  "storage_size": "20",
+  "resources": {
+    "requests.nvidia.com/l4": "1",
+    "requests.nvidia.com/gpu": "0"
+  }
 }
 ```
+
+**注意**：`resources` 字段支持任意 Kubernetes 资源键，可灵活配置各种资源限制。
 
 #### 查询项目
 ```http
@@ -122,9 +131,13 @@ Content-Type: application/json
 {
   "cpu_limit": "8",
   "memory_limit": "16",
-  "gpu_limit": "2"
+  "resources": {
+    "requests.nvidia.com/l4": "2"
+  }
 }
 ```
+
+**注意**：只更新提供的字段，未提供的字段保持不变。
 
 #### 删除项目
 ```http
@@ -140,58 +153,149 @@ import requests
 
 API_URL = "http://localhost:8000"
 
-# 创建用户
+# 1. 创建用户（自动生成密码）
 response = requests.post(
     f"{API_URL}/api/users",
-    json={
-        "email": "test@example.com",
-        "password": "mypassword123"
-    }
+    json={"email": "test@example.com"}
 )
 user = response.json()
-print(f"用户创建成功: {user['email']}, 密码: {user['password']}")
+print(f"✓ 用户: {user['email']}, 密码: {user['password']}")
+print(f"✓ 登录: {user['login_url']}")
 
-# 创建项目
+# 2. 创建项目（指定资源配额）
 response = requests.post(
     f"{API_URL}/api/projects",
     json={
         "owner_email": "test@example.com",
         "cpu_limit": "4",
         "memory_limit": "8",
-        "gpu_limit": "1"
+        "storage_size": "20",
+        "resources": {
+            "requests.nvidia.com/l4": "1",
+            "requests.nvidia.com/gpu": "0"
+        }
     }
 )
 project = response.json()
-print(f"项目创建成功: {project['name']}")
+print(f"✓ 项目: {project['name']}")
+print(f"✓ 资源: {project['resources']}")
 
-# 更新资源限制
+# 3. 更新资源限制
 response = requests.put(
     f"{API_URL}/api/projects/{project['name']}",
     json={
         "cpu_limit": "8",
-        "memory_limit": "16"
+        "memory_limit": "16",
+        "resources": {
+            "requests.nvidia.com/l4": "2"
+        }
     }
 )
-print("资源限制更新成功")
+print("✓ 资源限制更新成功")
+
+# 4. 查询项目信息
+response = requests.get(f"{API_URL}/api/projects/by-email/test@example.com")
+project_info = response.json()
+print(f"✓ 当前配额: {project_info['resources']}")
+
+# 5. 重置用户密码
+response = requests.put(
+    f"{API_URL}/api/users/password",
+    json={"email": "test@example.com"}
+)
+reset = response.json()
+print(f"✓ 新密码: {reset['password']}")
 ```
 
 ### cURL 示例
 
+#### 用户管理
+
 ```bash
-# 创建用户
+# 创建用户（自动生成密码）
 curl -X POST "http://localhost:8000/api/users" \
   -H "Content-Type: application/json" \
-  -d '{"email": "test@example.com"}'
+  -d '{"email": "user@example.com"}'
 
-# 创建项目
-curl -X POST "http://localhost:8000/api/projects" \
+# 创建用户（指定密码）
+curl -X POST "http://localhost:8000/api/users" \
   -H "Content-Type: application/json" \
-  -d '{"owner_email": "test@example.com", "cpu_limit": "4", "memory_limit": "8"}'
+  -d '{"email": "user@example.com", "password": "mypass123"}'
 
-# 重置密码
+# 查询用户
+curl -X GET "http://localhost:8000/api/users/user@example.com"
+
+# 重置密码（自动生成）
 curl -X PUT "http://localhost:8000/api/users/password" \
   -H "Content-Type: application/json" \
-  -d '{"email": "test@example.com"}'
+  -d '{"email": "user@example.com"}'
+
+# 重置密码（指定新密码）
+curl -X PUT "http://localhost:8000/api/users/password" \
+  -H "Content-Type: application/json" \
+  -d '{"email": "user@example.com", "new_password": "newpass123"}'
+
+# 删除用户
+curl -X DELETE "http://localhost:8000/api/users/user@example.com"
+```
+
+#### 项目管理
+
+```bash
+# 创建项目（使用默认资源配额）
+curl -X POST "http://localhost:8000/api/projects" \
+  -H "Content-Type: application/json" \
+  -d '{"owner_email": "user@example.com"}'
+
+# 创建项目（自定义资源配额）
+curl -X POST "http://localhost:8000/api/projects" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "owner_email": "user@example.com",
+    "cpu_limit": "8",
+    "memory_limit": "16",
+    "storage_size": "50",
+    "resources": {
+      "requests.nvidia.com/l4": "2",
+      "requests.nvidia.com/gpu": "0"
+    }
+  }'
+
+# 查询项目（通过 profile 名称）
+curl -X GET "http://localhost:8000/api/projects/user-example-com"
+
+# 查询项目（通过邮箱）
+curl -X GET "http://localhost:8000/api/projects/by-email/user@example.com"
+
+# 更新 CPU 和内存
+curl -X PUT "http://localhost:8000/api/projects/user-example-com" \
+  -H "Content-Type: application/json" \
+  -d '{"cpu_limit": "16", "memory_limit": "32"}'
+
+# 更新 GPU 资源（只设置 L4）
+curl -X PUT "http://localhost:8000/api/projects/user-example-com" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "resources": {
+      "requests.nvidia.com/l4": "4"
+    }
+  }'
+
+# 更新多种资源
+curl -X PUT "http://localhost:8000/api/projects/user-example-com" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "cpu_limit": "32",
+    "memory_limit": "64",
+    "resources": {
+      "requests.nvidia.com/l4": "8",
+      "requests.nvidia.com/gpu": "0",
+      "persistentvolumeclaims": "10"
+    }
+  }'
+
+# 删除项目
+curl -X DELETE "http://localhost:8000/api/projects/user-example-com"
 ```
 
 ## 项目结构
@@ -217,12 +321,103 @@ kubeflow-manager/
 - **Pydantic**: 数据验证
 - **Uvicorn**: ASGI 服务器
 
+## 高级用法
+
+### 灵活的 GPU 资源配置
+
+`resources` 字段支持任意 Kubernetes 资源键，可以灵活配置不同类型的 GPU：
+
+```bash
+# 场景1：只使用 L4 GPU
+curl -X POST "http://localhost:8000/api/projects" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "owner_email": "user@example.com",
+    "resources": {
+      "requests.nvidia.com/l4": "2",
+      "requests.nvidia.com/gpu": "0"
+    }
+  }'
+
+# 场景2：使用通用 GPU
+curl -X POST "http://localhost:8000/api/projects" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "owner_email": "user@example.com",
+    "resources": {
+      "requests.nvidia.com/gpu": "1",
+      "requests.nvidia.com/l4": "0"
+    }
+  }'
+
+# 场景3：添加其他 Kubernetes 资源限制
+curl -X PUT "http://localhost:8000/api/projects/user-example-com" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "resources": {
+      "requests.nvidia.com/l4": "4",
+      "limits.nvidia.com/l4": "4",
+      "persistentvolumeclaims": "5",
+      "services": "10"
+    }
+  }'
+```
+
+### 资源配额说明
+
+- **CPU 限制**：以核心为单位，例如 "4" 表示 4 核
+- **内存限制**：以 GiB 为单位，例如 "8" 表示 8 GiB（自动添加 Gi 后缀）
+- **存储配额**：以 GiB 为单位，例如 "20" 表示 20 GiB
+- **GPU 资源**：
+  - `requests.nvidia.com/l4`: NVIDIA L4 GPU 数量
+  - `requests.nvidia.com/gpu`: 通用 NVIDIA GPU 数量
+  - 可根据集群配置添加其他 GPU 类型
+
+### 默认资源配额
+
+如果创建项目时不指定资源，将使用以下默认值：
+- CPU: 2 核
+- 内存: 4 GiB
+- GPU: 0
+- 存储: 10 GiB
+
+可在 `.env` 文件中修改默认值：
+```bash
+DEFAULT_CPU_LIMIT=4
+DEFAULT_MEMORY_LIMIT=8
+DEFAULT_GPU_LIMIT=0
+DEFAULT_STORAGE_SIZE=20
+```
+
+## 常见问题
+
+### Q: 如何只更新某一个资源而不影响其他资源？
+**A:** 只在请求中包含要更新的字段，未包含的字段保持不变：
+```bash
+# 只更新 L4 GPU 数量
+curl -X PUT "http://localhost:8000/api/projects/xxx" \
+  -d '{"resources": {"requests.nvidia.com/l4": "2"}}'
+```
+
+### Q: 为什么密码查询时返回 null？
+**A:** 出于安全考虑，密码经过单向哈希加密，无法还原。只有创建用户和重置密码时才会返回明文密码。
+
+### Q: Profile 名称是如何生成的？
+**A:** 将邮箱中的 `.` 和 `@` 替换为 `-`。例如：
+- `user@example.com` → `user-example-com`
+- `john.doe@company.com` → `john-doe-company-com`
+
+### Q: 如何查看 API 的详细文档？
+**A:** 启动服务后访问 `http://localhost:8000/docs`，可以看到交互式 API 文档（Swagger UI）。
+
 ## 注意事项
 
-1. 确保有正确的 Kubernetes 集群访问权限
-2. Dex 必须已正确配置并运行
-3. 需要有足够的权限操作 Profiles、ConfigMaps 和 Secrets
-4. 建议在生产环境中添加认证和授权机制
+1. **权限要求**：确保有正确的 Kubernetes 集群访问权限
+2. **Dex 配置**：Dex 必须已正确配置并运行在 `auth` 命名空间
+3. **RBAC 权限**：需要有足够的权限操作 Profiles、ConfigMaps、Secrets 和 Deployments
+4. **安全建议**：生产环境中建议添加 API 认证和授权机制
+5. **并发控制**：多个并发请求可能导致资源冲突，建议实现乐观锁或分布式锁
+6. **资源限制类型**：本系统只设置 ResourceQuota 的 hard 限制（最高资源限制），不设置 LimitRange
 
 ## 部署建议
 
@@ -253,6 +448,73 @@ docker run -p 8000:8000 -v ~/.kube:/root/.kube kubeflow-manager
 ### Kubernetes 部署
 
 可以将此服务部署到 Kubernetes 集群中，使用 ServiceAccount 进行认证。
+
+## API 参考
+
+### 数据模型
+
+#### UserCreate
+```json
+{
+  "email": "user@example.com",      // 必填
+  "password": "mypassword",         // 可选，不提供自动生成
+  "username": "myusername"          // 可选，不提供从邮箱提取
+}
+```
+
+#### ProjectCreate
+```json
+{
+  "owner_email": "user@example.com",  // 必填
+  "cpu_limit": "4",                   // 可选，默认 2
+  "memory_limit": "8",                // 可选，默认 4（GiB）
+  "storage_size": "20",               // 可选，默认 10（GiB）
+  "resources": {                      // 可选，支持任意 K8s 资源键
+    "requests.nvidia.com/l4": "1",
+    "requests.nvidia.com/gpu": "0"
+  }
+}
+```
+
+#### ProjectUpdate
+```json
+{
+  "cpu_limit": "8",                   // 可选
+  "memory_limit": "16",               // 可选（GiB）
+  "storage_size": "30",               // 可选（GiB）
+  "resources": {                      // 可选
+    "requests.nvidia.com/l4": "2"
+  }
+}
+```
+
+### 响应格式
+
+#### 成功响应
+```json
+{
+  "name": "user-example-com",
+  "owner": "user@example.com",
+  "namespace": "user-example-com",
+  "resources": {
+    "cpu": "8",
+    "memory": "16Gi",
+    "requests.nvidia.com/l4": "2",
+    "requests.storage": "30Gi"
+  }
+}
+```
+
+#### 错误响应
+```json
+{
+  "detail": "项目 xxx 不存在"
+}
+```
+
+## 贡献指南
+
+欢迎提交 Issue 和 Pull Request！
 
 ## 许可证
 
