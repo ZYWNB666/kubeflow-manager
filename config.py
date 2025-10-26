@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     dex_deployment_name: str = "dex"
     
     # Kubeflow 配置
-    kubeflow_domain: str = "kubeflow.id.gametech.garenanow.com"
+    kubeflow_domain: str = "kubeflow.id.domain.com"
     
     # 默认资源配额
     default_cpu_limit: str = "2"
