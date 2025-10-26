@@ -43,12 +43,27 @@ class ProjectService:
         
         # 添加额外的资源配置（如 GPU）
         if resources:
+            # GPU 检测模式
+            gpu_patterns = ['nvidia.com', 'amd.com/gpu', 'gpu']
+            has_gpu_config = any(
+                any(pattern in key.lower() for pattern in gpu_patterns)
+                for key in resources.keys()
+            )
+            
+            if has_gpu_config:
+                # 如果 resources 中有 GPU 配置，将 config 中定义的所有 GPU 键设为 0
+                gpu_keys_from_config = settings.gpu_resource_keys
+                for gpu_key in gpu_keys_from_config:
+                    hard_resources[gpu_key] = "0"
+            
+            # 应用用户提供的资源配置（会覆盖上面设置的 0）
             hard_resources.update(resources)
         else:
             # 如果没有提供 resources，使用默认 GPU 配置
             default_gpu = settings.default_gpu_limit
-            hard_resources["requests.nvidia.com/gpu"] = default_gpu
-            hard_resources["requests.nvidia.com/l4"] = default_gpu
+            gpu_keys_from_config = settings.gpu_resource_keys
+            for gpu_key in gpu_keys_from_config:
+                hard_resources[gpu_key] = default_gpu
         
         # 创建 ConfigMap
         configmap_data = {
@@ -133,7 +148,7 @@ class ProjectService:
         # 更新其他资源配置（如 GPU）
         if resources:
             # 从配置中获取 GPU 资源键列表
-            gpu_keys = settings.gpu_resource_keys
+            gpu_keys_from_config = settings.gpu_resource_keys
             
             # 检查 resources 中是否有任何看起来像 GPU 的键
             # GPU 键通常包含这些特征：nvidia.com, amd.com/gpu, 或者常见的 GPU 型号
@@ -144,8 +159,18 @@ class ProjectService:
             )
             
             if has_gpu_config:
-                # 如果请求中有任何 GPU 相关配置，将配置文件中定义的所有 GPU 键设为 0
-                for gpu_key in gpu_keys:
+                # 找出 hard 中所有看起来像 GPU 的键
+                existing_gpu_keys = [
+                    key for key in hard.keys()
+                    if any(pattern in key.lower() for pattern in gpu_patterns)
+                ]
+                
+                # 将所有现有的 GPU 键设为 0（包括不在 config 中的）
+                for gpu_key in existing_gpu_keys:
+                    hard[gpu_key] = "0"
+                
+                # 同时确保 config 中定义的 GPU 键也设为 0（即使之前不存在）
+                for gpu_key in gpu_keys_from_config:
                     hard[gpu_key] = "0"
             
             # 应用用户提供的资源配置（会覆盖上面设置的 0）
