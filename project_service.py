@@ -132,6 +132,18 @@ class ProjectService:
         
         # 更新其他资源配置（如 GPU）
         if resources:
+            # 从配置中获取 GPU 资源键列表
+            gpu_keys = settings.gpu_resource_keys
+            
+            # 检查是否有任何 GPU 相关配置
+            has_gpu_config = any(key in resources for key in gpu_keys)
+            
+            if has_gpu_config:
+                # 如果设置了 GPU，将所有 GPU 键默认设为 0，然后用用户提供的值覆盖
+                for gpu_key in gpu_keys:
+                    hard[gpu_key] = "0"
+            
+            # 应用用户提供的资源配置
             hard.update(resources)
         
         if 'resourceQuotaSpec' not in profile['spec']:

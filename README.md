@@ -387,7 +387,12 @@ DEFAULT_CPU_LIMIT=4
 DEFAULT_MEMORY_LIMIT=8
 DEFAULT_GPU_LIMIT=0
 DEFAULT_STORAGE_SIZE=20
+
+# GPU 资源键列表（JSON 数组格式）
+GPU_RESOURCE_KEYS=["requests.nvidia.com/gpu","requests.nvidia.com/l4"]
 ```
+
+**注意**：`GPU_RESOURCE_KEYS` 定义了哪些资源键被视为 GPU 资源。当更新项目时，如果设置了列表中的任何一个键，其他未设置的 GPU 键将自动设为 0。
 
 ## 常见问题
 

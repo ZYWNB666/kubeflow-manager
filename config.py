@@ -23,6 +23,12 @@ class Settings(BaseSettings):
     default_gpu_limit: str = "0"  # NVIDIA L4 GPU
     default_storage_size: str = "10"
     
+    # GPU 资源键列表（更新时如果设置了任何 GPU，其他 GPU 自动设为 0）
+    gpu_resource_keys: list = [
+        "requests.nvidia.com/gpu",
+        "requests.nvidia.com/l4",
+    ]
+    
     # API 配置
     api_title: str = "Kubeflow User Management API"
     api_version: str = "1.0.0"
