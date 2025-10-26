@@ -109,8 +109,7 @@ Content-Type: application/json
   "memory_limit": "8",
   "storage_size": "20",
   "resources": {
-    "requests.nvidia.com/l4": "1",
-    "requests.nvidia.com/gpu": "0"
+    "requests.nvidia.com/l4": "1"
   }
 }
 ```
@@ -171,8 +170,7 @@ response = requests.post(
         "memory_limit": "8",
         "storage_size": "20",
         "resources": {
-            "requests.nvidia.com/l4": "1",
-            "requests.nvidia.com/gpu": "0"
+            "requests.nvidia.com/l4": "1"
         }
     }
 )
@@ -256,8 +254,7 @@ curl -X POST "http://localhost:8000/api/projects" \
     "memory_limit": "16",
     "storage_size": "50",
     "resources": {
-      "requests.nvidia.com/l4": "2",
-      "requests.nvidia.com/gpu": "0"
+      "requests.nvidia.com/l4": "2"
     }
   }'
 
@@ -288,9 +285,7 @@ curl -X PUT "http://localhost:8000/api/projects/user-example-com" \
     "cpu_limit": "32",
     "memory_limit": "64",
     "resources": {
-      "requests.nvidia.com/l4": "8",
-      "requests.nvidia.com/gpu": "0",
-      "persistentvolumeclaims": "10"
+      "requests.nvidia.com/l4": "8"
     }
   }'
 
@@ -325,42 +320,50 @@ kubeflow-manager/
 
 ### 灵活的 GPU 资源配置
 
-`resources` 字段支持任意 Kubernetes 资源键，可以灵活配置不同类型的 GPU：
+系统实现了智能 GPU 资源管理，`resources` 字段支持任意 Kubernetes 资源键。
+
+**GPU 自动清零逻辑**：
+当 `resources` 中包含任何 GPU 相关的键时（匹配 `nvidia.com`、`amd.com/gpu`、`gpu` 等模式），系统会：
+1. 将配置文件中定义的所有 GPU 键设为 0
+2. 将已存在的其他 GPU 键也设为 0  
+3. 应用用户提供的值
+
+这确保了不同 GPU 类型之间不会产生资源冲突。
 
 ```bash
-# 场景1：只使用 L4 GPU
+# 场景1：只使用 L4 GPU（其他 GPU 自动设为 0）
+curl -X POST "http://localhost:8000/api/projects" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "owner_email": "user@example.com",
+    "resources": {
+      "requests.nvidia.com/l4": "2"
+    }
+  }'
+# 结果：gpu=0, l4=2, t4=0（config 中定义的其他 GPU 自动为 0）
+
+# 场景2：使用多种 GPU（明确指定各自的值）
 curl -X POST "http://localhost:8000/api/projects" \
   -H "Content-Type: application/json" \
   -d '{
     "owner_email": "user@example.com",
     "resources": {
       "requests.nvidia.com/l4": "2",
-      "requests.nvidia.com/gpu": "0"
+      "requests.nvidia.com/h100": "1"
     }
   }'
+# 结果：gpu=0, l4=2, t4=0, h100=1
 
-# 场景2：使用通用 GPU
-curl -X POST "http://localhost:8000/api/projects" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "owner_email": "user@example.com",
-    "resources": {
-      "requests.nvidia.com/gpu": "1",
-      "requests.nvidia.com/l4": "0"
-    }
-  }'
-
-# 场景3：添加其他 Kubernetes 资源限制
+# 场景3：添加其他 Kubernetes 资源限制（不触发 GPU 清零）
 curl -X PUT "http://localhost:8000/api/projects/user-example-com" \
   -H "Content-Type: application/json" \
   -d '{
     "resources": {
-      "requests.nvidia.com/l4": "4",
-      "limits.nvidia.com/l4": "4",
       "persistentvolumeclaims": "5",
       "services": "10"
     }
   }'
+# GPU 配额保持不变（因为没有 GPU 相关的键）
 ```
 
 ### 资源配额说明
@@ -392,14 +395,53 @@ DEFAULT_STORAGE_SIZE=20
 GPU_RESOURCE_KEYS=["requests.nvidia.com/gpu","requests.nvidia.com/l4"]
 ```
 
-**注意**：`GPU_RESOURCE_KEYS` 定义了哪些资源键被视为 GPU 资源。当更新项目时，如果设置了列表中的任何一个键，其他未设置的 GPU 键将自动设为 0。
+**注意**：`GPU_RESOURCE_KEYS` 定义了哪些资源键被视为 GPU 资源。
+
+**GPU 资源自动管理逻辑**：
+- 创建或更新项目时，如果 `resources` 中包含**任何 GPU 相关的键**（包含 `nvidia.com`、`amd.com/gpu` 或 `gpu` 等模式）
+- 系统会自动将 `GPU_RESOURCE_KEYS` 中定义的所有 GPU 键设为 0
+- 同时将已存在的其他 GPU 键也设为 0
+- 然后应用用户提供的值
+
+**示例**：
+```bash
+# Config 中定义：gpu_resource_keys = ["requests.nvidia.com/gpu", "requests.nvidia.com/l4"]
+# 如果请求包含任何 GPU（如 h100）：
+curl -X PUT "http://localhost:8000/api/projects/xxx" \
+  -d '{"resources": {"requests.nvidia.com/h100": "1"}}'
+
+# 结果：gpu=0, l4=0, h100=1（config 中的键自动清零，只有 h100 为 1）
+```
 
 ## 常见问题
 
-### Q: 如何只更新某一个资源而不影响其他资源？
-**A:** 只在请求中包含要更新的字段，未包含的字段保持不变：
+### Q: GPU 资源是如何自动管理的？
+**A:** 为了避免资源冲突，系统实现了智能 GPU 管理：
+- 当请求中包含任何 GPU 相关资源（匹配模式：`nvidia.com`、`amd.com/gpu`、`gpu`）时
+- 自动将配置文件中定义的所有 GPU 键设为 0
+- 自动将已存在的其他 GPU 键也设为 0
+- 最后应用用户提供的值
+
+例如：
 ```bash
-# 只更新 L4 GPU 数量
+# 配置：gpu_resource_keys = ["requests.nvidia.com/gpu", "requests.nvidia.com/l4", "requests.nvidia.com/t4"]
+# 请求只设置 l4
+curl -X PUT "http://localhost:8000/api/projects/xxx" \
+  -d '{"resources": {"requests.nvidia.com/l4": "2"}}'
+# 结果：gpu=0, l4=2, t4=0（其他 GPU 自动清零）
+```
+
+### Q: 如何只更新某一个资源而不影响其他资源？
+**A:** 
+- **非 GPU 资源**：只在请求中包含要更新的字段，未包含的字段保持不变
+- **GPU 资源**：由于自动清零机制，更新任何 GPU 都会重置其他 GPU 为 0
+
+```bash
+# 只更新 CPU（其他资源不变）
+curl -X PUT "http://localhost:8000/api/projects/xxx" \
+  -d '{"cpu_limit": "16"}'
+
+# 更新 GPU（会自动清零其他 GPU）
 curl -X PUT "http://localhost:8000/api/projects/xxx" \
   -d '{"resources": {"requests.nvidia.com/l4": "2"}}'
 ```
@@ -415,6 +457,15 @@ curl -X PUT "http://localhost:8000/api/projects/xxx" \
 ### Q: 如何查看 API 的详细文档？
 **A:** 启动服务后访问 `http://localhost:8000/docs`，可以看到交互式 API 文档（Swagger UI）。
 
+### Q: 为什么我需要在 config 中定义 GPU 资源键？
+**A:** 配置文件中的 `gpu_resource_keys` 用于：
+- 定义哪些资源键应该被视为 GPU 资源
+- 在更新 GPU 配置时，自动清零这些键以避免资源冲突
+- 便于集中管理和修改 GPU 类型，无需改动代码
+
+### Q: 重启服务后修改是否生效？
+**A:** 是的，修改代码或配置文件后**必须重启服务**才能生效。使用 `Ctrl+C` 停止服务，然后 `python main.py` 重新启动。
+
 ## 注意事项
 
 1. **权限要求**：确保有正确的 Kubernetes 集群访问权限
@@ -423,6 +474,8 @@ curl -X PUT "http://localhost:8000/api/projects/xxx" \
 4. **安全建议**：生产环境中建议添加 API 认证和授权机制
 5. **并发控制**：多个并发请求可能导致资源冲突，建议实现乐观锁或分布式锁
 6. **资源限制类型**：本系统只设置 ResourceQuota 的 hard 限制（最高资源限制），不设置 LimitRange
+7. **GPU 资源管理**：更新任何 GPU 资源时，会自动清零 config 中定义的其他 GPU 资源，这是为了避免资源冲突
+8. **配置修改**：修改 `config.py` 或 `.env` 后需要重启服务才能生效
 
 ## 部署建议
 
@@ -475,8 +528,7 @@ docker run -p 8000:8000 -v ~/.kube:/root/.kube kubeflow-manager
   "memory_limit": "8",                // 可选，默认 4（GiB）
   "storage_size": "20",               // 可选，默认 10（GiB）
   "resources": {                      // 可选，支持任意 K8s 资源键
-    "requests.nvidia.com/l4": "1",
-    "requests.nvidia.com/gpu": "0"
+    "requests.nvidia.com/l4": "1"
   }
 }
 ```
