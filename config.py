@@ -27,6 +27,7 @@ class Settings(BaseSettings):
     gpu_resource_keys: list = [
         "requests.nvidia.com/gpu",
         "requests.nvidia.com/l4",
+        "requests.nvidia.com/t4",
     ]
     
     # API 配置
