@@ -1,5 +1,5 @@
 from pydantic import BaseModel, EmailStr, Field
-from typing import Optional
+from typing import Optional, Dict
 
 
 class UserCreate(BaseModel):
@@ -28,16 +28,51 @@ class ProjectCreate(BaseModel):
     owner_email: EmailStr = Field(..., description="项目所有者邮箱")
     cpu_limit: Optional[str] = Field(None, description="CPU 限制，例如：2")
     memory_limit: Optional[str] = Field(None, description="内存限制（GiB），例如：4")
-    gpu_limit: Optional[str] = Field(None, description="GPU 限制（同时设置 gpu 和 l4），例如：0")
     storage_size: Optional[str] = Field(None, description="存储大小（GiB），例如：10")
+    
+    # GPU 资源配置（使用字典，支持任意 Kubernetes 资源键）
+    resources: Optional[Dict[str, str]] = Field(
+        None, 
+        description="其他资源限制，支持任意 Kubernetes 资源键，例如：{'requests.nvidia.com/l4': '1', 'requests.nvidia.com/gpu': '0'}"
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "owner_email": "user@example.com",
+                "cpu_limit": "4",
+                "memory_limit": "8",
+                "storage_size": "20",
+                "resources": {
+                    "requests.nvidia.com/l4": "1",
+                    "requests.nvidia.com/gpu": "0"
+                }
+            }
+        }
 
 
 class ProjectUpdate(BaseModel):
     """更新项目资源限制请求模型"""
     cpu_limit: Optional[str] = Field(None, description="CPU 限制")
     memory_limit: Optional[str] = Field(None, description="内存限制（GiB）")
-    gpu_limit: Optional[str] = Field(None, description="GPU 限制（同时设置 gpu 和 l4）")
     storage_size: Optional[str] = Field(None, description="存储大小（GiB）")
+    
+    # GPU 资源配置（使用字典，支持任意 Kubernetes 资源键）
+    resources: Optional[Dict[str, str]] = Field(
+        None,
+        description="其他资源限制，支持任意 Kubernetes 资源键，例如：{'requests.nvidia.com/l4': '1'}"
+    )
+    
+    class Config:
+        json_schema_extra = {
+            "example": {
+                "cpu_limit": "8",
+                "memory_limit": "16",
+                "resources": {
+                    "requests.nvidia.com/l4": "2"
+                }
+            }
+        }
 
 
 class ProjectResponse(BaseModel):

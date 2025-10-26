@@ -17,8 +17,8 @@ class ProjectService:
         owner_email: str,
         cpu_limit: Optional[str] = None,
         memory_limit: Optional[str] = None,
-        gpu_limit: Optional[str] = None,
-        storage_size: Optional[str] = None
+        storage_size: Optional[str] = None,
+        resources: Optional[Dict[str, str]] = None
     ) -> Dict[str, Any]:
         """
         创建项目（Profile）
@@ -32,8 +32,23 @@ class ProjectService:
         # 使用默认值或提供的值
         cpu = cpu_limit or settings.default_cpu_limit
         memory = f"{memory_limit or settings.default_memory_limit}Gi"
-        gpu = gpu_limit or settings.default_gpu_limit
         storage = f"{storage_size or settings.default_storage_size}Gi"
+        
+        # 构建资源配额
+        hard_resources = {
+            "cpu": cpu,
+            "memory": memory,
+            "requests.storage": storage
+        }
+        
+        # 添加额外的资源配置（如 GPU）
+        if resources:
+            hard_resources.update(resources)
+        else:
+            # 如果没有提供 resources，使用默认 GPU 配置
+            default_gpu = settings.default_gpu_limit
+            hard_resources["requests.nvidia.com/gpu"] = default_gpu
+            hard_resources["requests.nvidia.com/l4"] = default_gpu
         
         # 创建 ConfigMap
         configmap_data = {
@@ -62,13 +77,7 @@ class ProjectService:
                     "name": owner_email
                 },
                 "resourceQuotaSpec": {
-                    "hard": {
-                        "cpu": cpu,
-                        "memory": memory,
-                        "requests.nvidia.com/gpu": gpu,
-                        "requests.nvidia.com/l4": gpu,
-                        "requests.storage": storage
-                    }
+                    "hard": hard_resources
                 }
             }
         }
@@ -95,12 +104,7 @@ class ProjectService:
             "name": profile_name,
             "owner": owner_email,
             "namespace": profile_name,
-            "resources": {
-                "cpu": cpu,
-                "memory": memory,
-                "gpu": gpu,
-                "storage": storage
-            }
+            "resources": hard_resources
         }
     
     def update_project_resources(
@@ -108,8 +112,8 @@ class ProjectService:
         profile_name: str,
         cpu_limit: Optional[str] = None,
         memory_limit: Optional[str] = None,
-        gpu_limit: Optional[str] = None,
-        storage_size: Optional[str] = None
+        storage_size: Optional[str] = None,
+        resources: Optional[Dict[str, str]] = None
     ) -> Dict[str, Any]:
         """更新项目资源限制"""
         profile = k8s_client.get_profile(profile_name)
@@ -123,12 +127,12 @@ class ProjectService:
             hard['cpu'] = cpu_limit
         if memory_limit:
             hard['memory'] = f"{memory_limit}Gi" if not memory_limit.endswith('Gi') else memory_limit
-        if gpu_limit is not None:
-            # 同时设置两个 GPU 键
-            hard['requests.nvidia.com/gpu'] = gpu_limit
-            hard['requests.nvidia.com/l4'] = gpu_limit
         if storage_size:
             hard['requests.storage'] = f"{storage_size}Gi" if not storage_size.endswith('Gi') else storage_size
+        
+        # 更新其他资源配置（如 GPU）
+        if resources:
+            hard.update(resources)
         
         if 'resourceQuotaSpec' not in profile['spec']:
             profile['spec']['resourceQuotaSpec'] = {}
