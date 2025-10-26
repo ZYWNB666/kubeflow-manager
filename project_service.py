@@ -65,6 +65,7 @@ class ProjectService:
                     "hard": {
                         "cpu": cpu,
                         "memory": memory,
+                        "requests.nvidia.com/gpu": gpu,
                         "requests.nvidia.com/l4": gpu,
                         "requests.storage": storage
                     }
@@ -122,7 +123,9 @@ class ProjectService:
             hard['cpu'] = cpu_limit
         if memory_limit:
             hard['memory'] = f"{memory_limit}Gi" if not memory_limit.endswith('Gi') else memory_limit
-        if gpu_limit:
+        if gpu_limit is not None:
+            # 同时设置两个 GPU 键
+            hard['requests.nvidia.com/gpu'] = gpu_limit
             hard['requests.nvidia.com/l4'] = gpu_limit
         if storage_size:
             hard['requests.storage'] = f"{storage_size}Gi" if not storage_size.endswith('Gi') else storage_size

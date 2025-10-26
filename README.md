@@ -19,7 +19,7 @@
 ### 资源配额管理
 - CPU 限制
 - 内存限制
-- GPU 限制（NVIDIA L4）
+- GPU 限制（同时设置 `requests.nvidia.com/gpu` 和 `requests.nvidia.com/l4`）
 - 存储配额
 
 ## 快速开始

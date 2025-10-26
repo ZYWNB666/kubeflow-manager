@@ -163,7 +163,7 @@ async def create_project(project: ProjectCreate):
     - owner_email: 项目所有者邮箱（必填）
     - cpu_limit: CPU 限制（可选，默认2）
     - memory_limit: 内存限制 GiB（可选，默认4）
-    - gpu_limit: GPU 限制 NVIDIA L4（可选，默认0）
+    - gpu_limit: GPU 限制，同时设置 gpu 和 l4（可选，默认0）
     - storage_size: 存储大小 GiB（可选，默认10）
     """
     try:
@@ -236,7 +236,7 @@ async def update_project(profile_name: str, update_data: ProjectUpdate):
     
     - cpu_limit: CPU 限制（可选）
     - memory_limit: 内存限制 GiB（可选）
-    - gpu_limit: GPU 限制 NVIDIA L4（可选）
+    - gpu_limit: GPU 限制，同时设置 gpu 和 l4（可选）
     - storage_size: 存储大小 GiB（可选）
     """
     try:

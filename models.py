@@ -28,7 +28,7 @@ class ProjectCreate(BaseModel):
     owner_email: EmailStr = Field(..., description="项目所有者邮箱")
     cpu_limit: Optional[str] = Field(None, description="CPU 限制，例如：2")
     memory_limit: Optional[str] = Field(None, description="内存限制（GiB），例如：4")
-    gpu_limit: Optional[str] = Field(None, description="GPU 限制（NVIDIA L4），例如：0")
+    gpu_limit: Optional[str] = Field(None, description="GPU 限制（同时设置 gpu 和 l4），例如：0")
     storage_size: Optional[str] = Field(None, description="存储大小（GiB），例如：10")
 
 
@@ -36,7 +36,7 @@ class ProjectUpdate(BaseModel):
     """更新项目资源限制请求模型"""
     cpu_limit: Optional[str] = Field(None, description="CPU 限制")
     memory_limit: Optional[str] = Field(None, description="内存限制（GiB）")
-    gpu_limit: Optional[str] = Field(None, description="GPU 限制（NVIDIA L4）")
+    gpu_limit: Optional[str] = Field(None, description="GPU 限制（同时设置 gpu 和 l4）")
     storage_size: Optional[str] = Field(None, description="存储大小（GiB）")
 
 
